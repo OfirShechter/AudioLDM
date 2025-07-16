@@ -45,7 +45,7 @@ REQUIRED = [
     "chardet",
     "numpy>=1.24.0",
     "soundfile",
-    "librosa>=0.10.0",
+    "librosa<0.10.0", # to fix the pad_center issue
     "scipy",
     "pandas",
     "torchlibrosa>=0.0.9",
