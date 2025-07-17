@@ -13,6 +13,49 @@ from audioldm.latent_diffusion.ddim import DDIMSampler
 from einops import repeat
 import os
 
+# --- Audio-only encoding and decoding ---
+def encode_audio_to_latent(latent_diffusion, audio_file_path, duration=None, config=None):
+    """
+    Encode an audio file to its latent representation using the model's first stage encoder.
+    Returns a torch.Tensor latent.
+    """
+    if config is not None:
+        assert type(config) is str
+        config = yaml.load(open(config, "r"), Loader=yaml.FullLoader)
+    else:
+        config = default_audioldm_config()
+    fn_STFT = TacotronSTFT(
+        config["preprocessing"]["stft"]["filter_length"],
+        config["preprocessing"]["stft"]["hop_length"],
+        config["preprocessing"]["stft"]["win_length"],
+        config["preprocessing"]["mel"]["n_mel_channels"],
+        config["preprocessing"]["audio"]["sampling_rate"],
+        config["preprocessing"]["mel"]["mel_fmin"],
+        config["preprocessing"]["mel"]["mel_fmax"],
+    )
+    if duration is None:
+        duration = get_duration(audio_file_path)
+    mel, _, _ = wav_to_fbank(
+        audio_file_path, target_length=int(duration * 102.4), fn_STFT=fn_STFT
+    )
+    mel = mel.unsqueeze(0).unsqueeze(0).to(latent_diffusion.device)
+    with torch.no_grad():
+        latent = latent_diffusion.get_first_stage_encoding(
+            latent_diffusion.encode_first_stage(mel)
+        )
+    return latent
+
+def decode_latent_to_audio(latent_diffusion, latent):
+    """
+    Decode a latent representation to audio waveform using the model's first stage decoder.
+    Returns a numpy array waveform.
+    """
+    with torch.no_grad():
+        mel = latent_diffusion.decode_first_stage(latent)
+        waveform = latent_diffusion.first_stage_model.decode_to_waveform(mel)
+    return waveform
+
+
 def make_batch_for_text_to_audio(text, waveform=None, fbank=None, batchsize=1):
     text = [text] * batchsize
     if batchsize < 1:
